@@ -177,8 +177,8 @@ def train_model(cfg: Config, env: Env_tsp, log_path: str = None) -> None:
         torch.save(
             act_model.state_dict(),
             cfg.model_dir + '%s_%s_step%d_act.pt' % (cfg.task, date, i),
-        )  #'cfg.model_dir = ./Pt/'
-        print('save model...')
+        )  # cfg.model_dir defaults to <project_root>/Checkpoints/TSP-DRL_Bello/
+        print('save model to %s...' % cfg.model_dir)
 
 
 if __name__ == '__main__':

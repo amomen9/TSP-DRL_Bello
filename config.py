@@ -3,6 +3,15 @@ import os
 import argparse
 from datetime import datetime
 
+# Central checkpoint directory: <project_root>/Checkpoints/TSP-DRL_Bello/
+# Resolved from this file's location (this repo lives at <project_root>/TSP-DRL_Bello/)
+# so it points at the right place regardless of the current working directory.
+# Trailing separator is kept because callers build paths via string concatenation.
+_REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_MODEL_DIR = (
+    os.path.join(os.path.dirname(_REPO_DIR), 'Checkpoints', 'TSP-DRL_Bello') + os.sep
+)
+
 
 def argparser() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -182,8 +191,8 @@ def argparser() -> argparse.Namespace:
         '--model_dir',
         metavar='MD',
         type=str,
-        default='./Pt/',
-        help='model save dir',
+        default=DEFAULT_MODEL_DIR,
+        help='model save dir (default: <project_root>/Checkpoints/TSP-DRL_Bello/)',
     )
     parser.add_argument(
         '-pd',
