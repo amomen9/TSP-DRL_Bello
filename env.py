@@ -90,6 +90,76 @@ class Env_tsp:
             p=2, dim=1
         )  # distance from last node to first selected node)
 
+    # ── Duration-matrix learning (fork addition) ────────────────────────────
+    # The original env represents an instance by 2-D coordinates and measures
+    # tours with the Euclidean norm. The helpers below let the same Pointer
+    # Network learn on a fixed, possibly ASYMMETRIC duration matrix instead:
+    # each city's encoder feature is the concatenation of its outgoing-cost row
+    # and incoming-cost column, and a tour is scored by the DIRECTED sum of
+    # matrix entries along it. For a symmetric matrix the two feature halves
+    # coincide and the directed cost equals the undirected tour length, so the
+    # represented problem is exactly the original symmetric TSP. The coordinate
+    # methods above are deliberately left untouched.
+
+    def set_duration_matrix(self, duration_matrix: torch.Tensor) -> torch.Tensor:
+        '''Attach a fixed (city_t, city_t) duration matrix to this env.
+        The diagonal is forced to 0 and city_t is updated to the matrix size.'''
+        m = torch.as_tensor(np.asarray(duration_matrix, dtype=np.float32)).clone()
+        if m.dim() != 2 or m.size(0) != m.size(1):
+            raise ValueError('duration_matrix must be a square 2-D matrix.')
+        m.fill_diagonal_(0.0)
+        self.duration_matrix = m
+        self.city_t = int(m.size(0))
+        return m
+
+    def _resolve_matrix(self, duration_matrix: torch.Tensor = None) -> torch.Tensor:
+        if duration_matrix is not None:
+            m = torch.as_tensor(np.asarray(duration_matrix, dtype=np.float32)).clone()
+            m.fill_diagonal_(0.0)
+            return m
+        m = getattr(self, 'duration_matrix', None)
+        if m is None:
+            raise ValueError('No duration matrix set; call set_duration_matrix() first.')
+        return m
+
+    def matrix_node_features(
+        self, duration_matrix: torch.Tensor = None, normalize: bool = True
+    ) -> torch.Tensor:
+        '''Per-city encoder features from the duration matrix: for city i, the
+        concatenation of row i (outgoing costs) and column i (incoming costs).
+        return features: (city_t, 2*city_t). For a symmetric matrix the two
+        halves are identical.'''
+        m = self._resolve_matrix(duration_matrix)
+        feats = torch.cat([m, m.transpose(0, 1)], dim=1)  # (city_t, 2*city_t)
+        if normalize:
+            denom = feats.max()
+            if float(denom) > 0:
+                feats = feats / denom
+        return feats
+
+    def stack_matrix_nodes(
+        self, n_samples: int, duration_matrix: torch.Tensor = None, normalize: bool = True
+    ) -> torch.Tensor:
+        '''Repeat one fixed instance's node features into a training batch.
+        return inputs: (n_samples, city_t, 2*city_t)'''
+        feats = self.matrix_node_features(duration_matrix, normalize=normalize)
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        return feats.unsqueeze(0).repeat(n_samples, 1, 1).to(device)
+
+    def stack_l_matrix(
+        self, tours: torch.Tensor, duration_matrix: torch.Tensor = None
+    ) -> torch.Tensor:
+        '''Directed tour cost on the duration matrix:
+        sum_i D[tour_i, tour_{i+1}] + D[tour_last, tour_0].
+        tours: (batch, city_t) -> l_batch: (batch). For a symmetric matrix this
+        equals the undirected tour length (the original objective on that
+        instance).'''
+        m = self._resolve_matrix(duration_matrix).to(tours.device)
+        tours = tours.long()
+        nxt = torch.roll(tours, shifts=-1, dims=1)
+        edge_costs = m[tours, nxt]  # (batch, city_t); closing edge included via roll
+        return edge_costs.sum(dim=1)
+
     def show(self, nodes: torch.Tensor, tour: torch.Tensor) -> None:
         nodes = nodes.cpu().detach()
         print('distance:{:.3f}'.format(self.get_tour_distance(nodes, tour)))

@@ -1,6 +1,75 @@
 # TSP Solver with Deep RL
 This is PyTorch implementation of NEURAL COMBINATORIAL OPTIMIZATION WITH REINFORCEMENT LEARNING, Bello et al. 2016
 [https://arxiv.org/abs/1611.09940]
+
+---
+
+## Fork modifications (DDORWA)
+
+**Original (upstream) repository:** `ci-ke/TSP-DRL_Bello` — <https://github.com/ci-ke/TSP-DRL_Bello>
+(itself a typed/refactored fork of Rintaro Kobayashi's original implementation
+`Rintarooo/TSP_DRL_PtrNet` — <https://github.com/Rintarooo/TSP_DRL_PtrNet>).
+
+This fork (`amomen9/TSP-DRL_Bello`) diverges from upstream at commit
+`147ad84` ("pass mypy check"). Every change made since that fork commit is
+listed below.
+
+### 1. Checkpoint save location (commit `b8fe271`)
+- **`config.py`** — `model_dir` now defaults to
+  `<project_root>/Checkpoints/TSP-DRL_Bello/` (resolved from the repo location
+  via the new `DEFAULT_MODEL_DIR`) instead of `./Pt/`, so trained actors are
+  written into the parent project's central checkpoint tree.
+- **`train.py`** — comment updated to reflect the new default model directory.
+- **`Csv/1113_12_12_train20_param.csv`** — regenerated parameter log reflecting
+  the new path.
+
+### 2. Learning from a duration matrix (current change set)
+Goal: let the same Pointer Network train and infer on a fixed, possibly
+**asymmetric** duration matrix (a DDORWA TSP instance) instead of only random
+2-D Euclidean coordinates — while leaving the original coordinate behaviour
+intact and keeping coordinates available for plotting.
+
+All changes are **additive and backward-compatible**: with the default
+`input_dim = 2` every original code path (coordinate input, Euclidean tour
+length, the pretrained `Pt/…_act.pt` checkpoint, `test.py`, `search.py`) behaves
+exactly as before.
+
+- **`config.py`** — new hyperparameter `input_dim` (default `2`) with a
+  `-id/--input_dim` CLI flag and a backward-compat guard (`Config.__init__`
+  injects `input_dim = 2` for pickles dumped before this change). `2` selects
+  the original `(x, y)` coordinate encoder; `2*city_t` selects the
+  duration-matrix encoder.
+- **`actor.py` (`PtrNet1`)** and **`critic.py` (`PtrNet2`)** — the input
+  embedding is now `nn.Linear(cfg.input_dim, cfg.embed)` instead of the
+  hard-coded `nn.Linear(2, …)`. No other layer changes; with `input_dim = 2`
+  the architecture is byte-for-byte the original.
+- **`env.py` (`Env_tsp`)** — new methods (the original coordinate methods are
+  left untouched):
+  - `set_duration_matrix(D)` — attach a fixed `(city_t, city_t)` matrix
+    (diagonal forced to 0; `city_t` synced to its size).
+  - `matrix_node_features(D=None, normalize=True)` — per-city feature =
+    concat(outgoing **row**, incoming **column**) → `(city_t, 2*city_t)`. For a
+    symmetric matrix the two halves are identical.
+  - `stack_matrix_nodes(n_samples, …)` — repeat one fixed instance's features
+    into a `(n_samples, city_t, 2*city_t)` training batch.
+  - `stack_l_matrix(tours, D=None)` — **directed** tour cost
+    `Σ D[t_i, t_{i+1}] + D[t_last, t_0]`. For a symmetric matrix this equals the
+    undirected Euclidean tour length, so the represented problem reduces exactly
+    to the original symmetric TSP.
+
+**Symmetric-equivalence guarantee:** for a symmetric input matrix the directed
+objective and the (mirrored) node features coincide with the
+undirected/coordinate formulation, so the modified Bello optimises the same
+problem the original did. Verified numerically: `stack_l_matrix` equals the
+original `stack_l_fast` Euclidean cost on a coordinate-derived symmetric matrix.
+
+> The experiment-runner integration that drives this matrix mode
+> (single-instance retraining as a benchmark baseline, disk save/load with the
+> project's matching rules, and the post-training symmetrisation → MDS
+> coordinate reconstruction used for plotting) lives in the parent DDORWA
+> project and is documented in its README.
+
+---
   
 Pointer Networks is the model architecture proposed by Vinyals et al. 2015
 [https://arxiv.org/abs/1506.03134]

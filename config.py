@@ -55,6 +55,18 @@ def argparser() -> argparse.Namespace:
         '-e', '--embed', metavar='EM', type=int, default=128, help='embedding size'
     )
     parser.add_argument(
+        '-id',
+        '--input_dim',
+        metavar='ID',
+        type=int,
+        default=2,
+        help=(
+            'per-city encoder input dimension. Default 2 = the original 2-D '
+            'Euclidean coordinate (x, y). When learning from a duration matrix '
+            'this is set to 2*city_t (outgoing-row concat incoming-column).'
+        ),
+    )
+    parser.add_argument(
         '-hi', '--hidden', metavar='HI', type=int, default=128, help='hidden size'
     )
     parser.add_argument(
@@ -222,6 +234,7 @@ class Config:
     city_t: int
     steps: int
     embed: int
+    input_dim: int
     hidden: int
     clip_logits: int
     softmax_T: float
@@ -248,6 +261,11 @@ class Config:
 
     def __init__(self, **kwargs) -> None:
         self.__dict__.update(kwargs)
+        # Backward compatibility: pickles dumped before the matrix-learning fork
+        # have no 'input_dim'. Default to 2 (the original 2-D coordinate encoder)
+        # so old configs and the pretrained coordinate checkpoint keep working.
+        if not hasattr(self, 'input_dim'):
+            self.input_dim = 2
         self.dump_date = datetime.now().strftime('%m%d_%H_%M')
         self.task = '%s%d' % (self.mode, self.city_t)
         self.pkl_path = self.pkl_dir + '%s.pkl' % (self.task)

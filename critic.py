@@ -8,7 +8,10 @@ from config import Config, load_pkl, pkl_parser
 class PtrNet2(nn.Module):
     def __init__(self, cfg: Config) -> None:
         super().__init__()
-        self.Embedding = nn.Linear(2, cfg.embed, bias=False)
+        # input_dim is 2 for the original (x, y) coordinate encoder, or 2*city_t
+        # when learning from a duration matrix (outgoing row + incoming column
+        # per city). getattr keeps old configs/checkpoints (no input_dim) at 2.
+        self.Embedding = nn.Linear(getattr(cfg, 'input_dim', 2), cfg.embed, bias=False)
         self.Encoder = nn.LSTM(
             input_size=cfg.embed, hidden_size=cfg.hidden, batch_first=True
         )
@@ -38,7 +41,7 @@ class PtrNet2(nn.Module):
             nn.init.uniform_(param.data, init_min, init_max)
 
     def forward(self, x: torch.Tensor, device: str) -> torch.Tensor:
-        '''x: (batch, city_t, 2)
+        '''x: (batch, city_t, input_dim)  # input_dim = 2 (coords) or 2*city_t (matrix)
         enc_h: (batch, city_t, embed)
         query(Decoder input): (batch, 1, embed)
         h: (1, batch, embed)
