@@ -313,7 +313,7 @@ def pkl_parser() -> argparse.Namespace:
         '--path',
         metavar='P',
         type=str,
-        default='Pkl/test20.pkl',
+        default=os.path.join(_REPO_DIR, 'Pkl', 'test20.pkl'),
         help='pkl file name',
     )
     args = parser.parse_args()
